@@ -1,6 +1,6 @@
 const mongoose=require('mongoose')
 
-const ledgerSchema=new Mongoose.Schema({
+const ledgerSchema=new mongoose.Schema({
     account:{
         type:mongoose.Schema.Types.ObjectId,
         ref:"account",
@@ -21,7 +21,7 @@ const ledgerSchema=new Mongoose.Schema({
     },
     type:{
         type:String,
-        enum:{value:["CREDIT","DEBIT"],message:"Type must be either credit or debit"},
+        enum:{values:["CREDIT","DEBIT"],message:"Type must be either credit or debit"},
         required:[true,"Ledger tyoe is required"],
         immutable:true
     }

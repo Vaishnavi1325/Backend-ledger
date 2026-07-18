@@ -1,42 +1,59 @@
 const accountModel=require('../models/account.model')
 
+/**
+ * - Create Account Controller
+ * - POST /api/account/
+ */
 async function userAccountController(req,res) {
     const user=req.user;
+
     const account=await accountModel.create({
         user:user._id
     })
+
     res.status(201).json({
-        account
+        success:true,
+        data:{
+            account
+        },
+        error:null
     })
 }
+
+/**
+ * - Get User Accounts Controller
+ * - GET /api/account/
+ */
 async function getUserAccountsController(req, res) {
 
     const accounts = await accountModel.find({ user: req.user._id });
 
     res.status(200).json({
-        accounts
+        success: true,
+        data: {
+            accounts
+        },
+        error: null
     })
 }
 
+/**
+ * - Get Account Balance Controller
+ * - GET /api/account/balance/:accountId
+ */
 async function getAccountBalanceController(req, res) {
-    const { accountId } = req.params;
-
-    const account = await accountModel.findOne({
-        _id: accountId,
-        user: req.user._id
-    })
-
-    if (!account) {
-        return res.status(404).json({
-            message: "Account not found"
-        })
-    }
+    // checkOwnership middleware already loaded and verified this account
+    const account = req.account;
 
     const balance = await account.getBalance();
 
     res.status(200).json({
-        accountId: account._id,
-        balance: balance
+        success: true,
+        data: {
+            accountId: account._id,
+            balance: balance
+        },
+        error: null
     })
 }
 

@@ -18,6 +18,16 @@ const userSchema=new mongoose.Schema({
         required:[true,"Password field is required"],
         minlength:[6,"Password must be of more than 6 characters"],
         select:false
+    },
+    // Used for authorization (RBAC). Never set from client input:
+    // registration always creates a "customer", roles are changed only by admins.
+    role:{
+        type:String,
+        enum:{
+            values:["customer","support","admin"],
+            message:"Role can be either customer, support or admin"
+        },
+        default:"customer"
     }
 },{
     timsetamps:true

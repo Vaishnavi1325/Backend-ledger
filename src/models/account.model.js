@@ -1,5 +1,5 @@
 const mongoose=require('mongoose')
-
+const ledgerModel=require('../models/ledger.model')
 const accountSchema=new mongoose.Schema({
     user:{
         type:mongoose.Schema.Types.ObjectId,
