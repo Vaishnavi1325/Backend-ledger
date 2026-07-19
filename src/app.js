@@ -1,5 +1,6 @@
 //work of app.js-> create a server and config the server(middlewares used and api endpoints used)
 const express=require('express')
+const cors=require('cors')
 const authRouter=require('./routes/auth.route');
 const accountRouter=require('./routes/account.route')
 const transactionRoutes=require('./routes/transaction.route')
@@ -9,6 +10,14 @@ const notFound=require('./middlewares/notFound')
 const errorHandler=require('./middlewares/errorHandler')
 
 const app=express();
+
+// Allow the frontend (Next.js dev server) to call this API from the browser.
+// credentials:true lets the auth cookie travel with cross-origin requests.
+app.use(cors({
+    origin: "http://localhost:3001",
+    credentials: true
+}))
+
 app.use(express.json())
 app.use(cookieParser())
 app.use('/api/auth',authRouter)

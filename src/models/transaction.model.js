@@ -36,5 +36,13 @@ const transactionSchema=new mongoose.Schema({
     timestamps:true
 })
 
+// Compound indexes: account-scoped queries sorted by date
+transactionSchema.index({ fromAccount: 1, createdAt: -1 })
+transactionSchema.index({ toAccount: 1, createdAt: -1 })
+
+// Single-field indexes for filtering
+transactionSchema.index({ amount: 1 })
+transactionSchema.index({ status: 1 })
+
 const transactionModel=mongoose.model("transaction",transactionSchema)
 module.exports=transactionModel

@@ -239,7 +239,106 @@ async function createInitialFundsTransaction(req, res) {
         success: true,
         data: {
             message: "Initial funds transaction completed successfully",
+ 
+ 
             transaction: transaction
+        },
+        error: null
+    })
+}
+
+// Build the MongoDB filter object from validated query params.
+// Keeps the controller clean by isolating this logic.
+function buildTransactionFilter(query) {
+    const filter = {}
+
+    if (query.status) {
+        filter.status = query.status
+    }
+
+    if (query.minAmount || query.maxAmount) {
+        filter.amount = {}
+        if (query.minAmount) {
+            filter.amount.$gte = query.minAmount
+        }
+        if (query.maxAmount) {
+            filter.amount.$lte = query.maxAmount
+        }
+    }
+
+    if (query.fromDate || query.toDate) {
+        filter.createdAt = {}
+        if (query.fromDate) {
+            filter.createdAt.$gte = new Date(query.fromDate)
+        }
+        if (query.toDate) {
+            filter.createdAt.$lte = new Date(query.toDate)
+        }
+    }
+
+    return filter
+}
+
+/**
+ * GET /api/transactions/
+ * List transactions with pagination, filtering, and sorting.
+ * Customers see only their own transactions. Admins see all.
+ */
+async function getTransactions(req, res) {
+    const { page, limit, sortBy, order, ...filterParams } = req.query
+
+    const filter = buildTransactionFilter(filterParams)
+
+    // Customers can only see transactions involving their own accounts
+    if (req.user.role !== "admin") {
+        const userAccounts = await accountModel.find({ user: req.user._id })
+
+        const accountIds = userAccounts.map(function (account) {
+            return account._id
+        })
+
+        filter.$or = [
+            { fromAccount: { $in: accountIds } },
+            { toAccount: { $in: accountIds } }
+        ]
+    }
+
+    const result = await transactionService.getTransactions(filter, sortBy, order, page, limit)
+
+    res.status(200).json({
+        success: true,
+        data: {
+            transactions: result.transactions,
+            pagination: result.pagination
+        },
+        error: null
+    })
+}
+
+/**
+ * GET /api/transactions/account/:accountId
+ * List transactions for a specific account with pagination, filtering, and sorting.
+ * checkOwnership middleware already verified the user owns this account.
+ */
+async function getAccountTransactions(req, res) {
+    const { page, limit, sortBy, order, ...filterParams } = req.query
+
+    const filter = buildTransactionFilter(filterParams)
+
+    // Show transactions where this account is sender or receiver
+    const accountId = req.params.accountId
+    filter.$or = [
+        { fromAccount: accountId },
+        { toAccount: accountId }
+    ]
+
+    const result = await transactionService.getTransactions(filter, sortBy, order, page, limit)
+
+    res.status(200).json({
+        success: true,
+        data: {
+            transactions: result.transactions,
+            pagination: result.pagination
         },
         error: null
     })
@@ -247,5 +346,7 @@ async function createInitialFundsTransaction(req, res) {
 
 module.exports = {
     createTransaction,
-    createInitialFundsTransaction
+    createInitialFundsTransaction,
+    getTransactions,
+    getAccountTransactions
 }
