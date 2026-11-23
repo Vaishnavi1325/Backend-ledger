@@ -124,27 +124,27 @@ async function createTransaction(req, res) {
         try {
             session.startTransaction()
 
-            transaction = (await transactionModel.create([ {
+            transaction = (await transactionModel.create([{
                 fromAccount,
                 toAccount,
                 amount,
                 idempotencyKey,
                 status: "PENDING"
-            } ], { session }))[ 0 ]
+            }], { session }))[0]
 
-            await ledgerModel.create([ {
+            await ledgerModel.create([{
                 account: fromAccount,
                 amount: amount,
                 transaction: transaction._id,
                 type: "DEBIT"
-            } ], { session })
+            }], { session })
 
-            await ledgerModel.create([ {
+            await ledgerModel.create([{
                 account: toAccount,
                 amount: amount,
                 transaction: transaction._id,
                 type: "CREDIT"
-            } ], { session })
+            }], { session })
 
             await transactionModel.findOneAndUpdate(
                 { _id: transaction._id },
@@ -248,27 +248,27 @@ async function createInitialFundsTransaction(req, res) {
         try {
             session.startTransaction()
 
-            transaction = (await transactionModel.create([ {
+            transaction = (await transactionModel.create([{
                 fromAccount: fromUserAccount._id,
                 toAccount,
                 amount,
                 idempotencyKey,
                 status: "PENDING"
-            } ], { session }))[ 0 ]
+            }], { session }))[0]
 
-            await ledgerModel.create([ {
+            await ledgerModel.create([{
                 account: fromUserAccount._id,
                 amount: amount,
                 transaction: transaction._id,
                 type: "DEBIT"
-            } ], { session })
+            }], { session })
 
-            await ledgerModel.create([ {
+            await ledgerModel.create([{
                 account: toAccount,
                 amount: amount,
                 transaction: transaction._id,
                 type: "CREDIT"
-            } ], { session })
+            }], { session })
 
             await transactionModel.findOneAndUpdate(
                 { _id: transaction._id },
@@ -321,8 +321,8 @@ async function createInitialFundsTransaction(req, res) {
         success: true,
         data: {
             message: "Initial funds transaction completed successfully",
- 
- 
+
+
             transaction: transaction
         },
         error: null

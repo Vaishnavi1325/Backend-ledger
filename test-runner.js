@@ -49,11 +49,14 @@ function makeRequest(method, path, body = null, token = null) {
     });
 }
 
+let passedTests = 0;
+
 function assert(condition, message) {
     if (!condition) {
         console.error(`❌ FAILED: ${message}`);
         throw new Error(message);
     } else {
+        passedTests++;
         console.log(`✅ PASSED: ${message}`);
     }
 }
@@ -125,6 +128,17 @@ async function runTests() {
         const accB = await makeRequest('POST', '/api/account', { currency: 'INR' }, tokenB);
         assert(accB.status === 201 && accB.body.data.account, 'Create account for Bob');
         const accountIdB = accB.body.data.account._id;
+
+        // 6b. Recipient Name Lookup & Verification
+        const lookupBob = await makeRequest('GET', `/api/account/lookup/${accountIdB}`, null, tokenA);
+        assert(lookupBob.status === 200 && lookupBob.body.data.recipient.holderName === 'Bob Ledger' && !lookupBob.body.data.recipient.isOwnAccount && lookupBob.body.data.recipient.canReceiveTransfers, 'Recipient lookup verifies Bob name and active status');
+
+        const lookupSelf = await makeRequest('GET', `/api/account/lookup/${accountIdA}`, null, tokenA);
+        assert(lookupSelf.status === 200 && lookupSelf.body.data.recipient.isOwnAccount, 'Recipient lookup detects self-account');
+
+        const nonExistentId = new mongoose.Types.ObjectId().toString();
+        const lookup404 = await makeRequest('GET', `/api/account/lookup/${nonExistentId}`, null, tokenA);
+        assert(lookup404.status === 404, 'Recipient lookup returns 404 for non-existent account');
 
         // 7. Inject Initial Funds into Alice Account via system route
         const initFunds = await makeRequest('POST', '/api/transactions/system/initial-funds', {
@@ -227,7 +241,7 @@ async function runTests() {
         assert(closeBobEmpty.status === 200 && closeBobEmpty.body.data.account.status === 'CLOSED', 'Empty account closed successfully');
 
         console.log('\n========================================');
-        console.log('🎉 ALL 21 BACKEND INTEGRATION TESTS PASSED!');
+        console.log(`🎉 ALL ${passedTests} BACKEND INTEGRATION TESTS PASSED!`);
         console.log('========================================\n');
     } finally {
         if (server) server.close();

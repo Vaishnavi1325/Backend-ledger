@@ -3,10 +3,11 @@
 import { createContext, useState, useEffect, ReactNode } from "react";
 import { logoutUser } from "@/lib/api/auth";
 
-interface AuthUser {
+export interface AuthUser {
   id: string;
   email: string;
   name: string;
+  role?: "customer" | "admin" | "support" | string;
 }
 
 interface AuthContextType {

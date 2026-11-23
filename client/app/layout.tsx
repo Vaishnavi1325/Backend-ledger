@@ -1,14 +1,12 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { Geist } from "next/font/google";
-import { cn } from "@/lib/utils";
 import { AuthProvider } from "@/context/AuthContext";
-
-const geist = Geist({subsets:['latin'],variable:'--font-sans'});
+import { ToastProvider } from "@/context/ToastContext";
+import { QueryProvider } from "@/components/providers/QueryProvider";
 
 export const metadata: Metadata = {
-  title: "Bank Transaction System",
-  description: "A secure banking application",
+  title: "Bank Transaction System - Secure Double-Entry Banking Platform",
+  description: "A secure double-entry banking and ledger application",
 };
 
 export default function RootLayout({
@@ -17,9 +15,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={cn("font-sans", geist.variable)}>
+    <html lang="en" className="font-sans antialiased">
       <body>
-        <AuthProvider>{children}</AuthProvider>
+        <QueryProvider>
+          <AuthProvider>
+            <ToastProvider>{children}</ToastProvider>
+          </AuthProvider>
+        </QueryProvider>
       </body>
     </html>
   );

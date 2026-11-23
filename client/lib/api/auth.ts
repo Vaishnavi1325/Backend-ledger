@@ -6,6 +6,7 @@ interface AuthResponse {
     id: string;
     email: string;
     name: string;
+    role?: "customer" | "admin" | "support";
   };
   token: string;
 }

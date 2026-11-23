@@ -1,7 +1,10 @@
 const accountModel = require('../models/account.model')
 const ledgerModel = require('../models/ledger.model')
 const transactionModel = require('../models/transaction.model')
+const userModel = require('../models/user.model')
 const accountService = require('../services/account.service')
+const AppError = require('../utils/AppError')
+const mongoose = require('mongoose')
 
 /**
  * - Create Account Controller
@@ -183,10 +186,191 @@ async function closeAccountController(req, res) {
     });
 }
 
+/**
+ * - Deposit Funds Controller
+ * - POST /api/account/deposit
+ * Deposits funds into an active account using double-entry accounting (from Bank Reserve account).
+ */
+async function depositFundsController(req, res) {
+    const { accountId, amount, idempotencyKey } = req.body;
+
+    const targetAccount = await accountModel.findById(accountId);
+    if (!targetAccount) {
+        throw new AppError("Target account not found", 404);
+    }
+
+    if (req.user.role !== "admin" && targetAccount.user.toString() !== req.user._id.toString()) {
+        throw new AppError("Forbidden: you can only deposit funds into your own accounts", 403);
+    }
+
+    if (targetAccount.status !== "ACTIVE") {
+        throw new AppError(`Account is ${targetAccount.status}. Deposits only allowed for ACTIVE accounts`, 400);
+    }
+
+    // Check idempotency
+    const existingTx = await transactionModel.findOne({ idempotencyKey });
+    if (existingTx) {
+        return res.status(200).json({
+            success: true,
+            data: {
+                message: "Deposit transaction already processed",
+                transaction: existingTx
+            },
+            error: null
+        });
+    }
+
+    // Find or create central reserve system user and account
+    let systemUser = await userModel.findOne({ systemUser: true });
+    if (!systemUser) {
+        systemUser = await userModel.create({
+            name: "Central Bank Reserve",
+            email: "reserve@bank.internal",
+            password: "systemreservepass123",
+            role: "admin",
+            systemUser: true
+        });
+    }
+
+    let reserveAccount = await accountModel.findOne({ user: systemUser._id });
+    if (!reserveAccount) {
+        reserveAccount = await accountModel.create({
+            user: systemUser._id,
+            currency: targetAccount.currency || "INR"
+        });
+    }
+
+    const isReplicaSet = Boolean(
+        mongoose.connection.client?.topology?.description?.type === "ReplicaSetWithPrimary" ||
+        mongoose.connection.client?.topology?.description?.type === "Sharded"
+    );
+
+    let transaction;
+    if (isReplicaSet) {
+        const session = await mongoose.startSession();
+        try {
+            session.startTransaction();
+
+            transaction = (await transactionModel.create([ {
+                fromAccount: reserveAccount._id,
+                toAccount: targetAccount._id,
+                amount,
+                idempotencyKey,
+                status: "PENDING"
+            } ], { session }))[ 0 ];
+
+            await ledgerModel.create([ {
+                account: reserveAccount._id,
+                amount,
+                transaction: transaction._id,
+                type: "DEBIT"
+            } ], { session });
+
+            await ledgerModel.create([ {
+                account: targetAccount._id,
+                amount,
+                transaction: transaction._id,
+                type: "CREDIT"
+            } ], { session });
+
+            await transactionModel.findOneAndUpdate(
+                { _id: transaction._id },
+                { status: "COMPLETED" },
+                { session }
+            );
+
+            await session.commitTransaction();
+        } catch (error) {
+            await session.abortTransaction();
+            throw new AppError("Deposit could not be completed, please retry", 500);
+        } finally {
+            session.endSession();
+        }
+    } else {
+        try {
+            transaction = await transactionModel.create({
+                fromAccount: reserveAccount._id,
+                toAccount: targetAccount._id,
+                amount,
+                idempotencyKey,
+                status: "PENDING"
+            });
+
+            await ledgerModel.create({
+                account: reserveAccount._id,
+                amount,
+                transaction: transaction._id,
+                type: "DEBIT"
+            });
+
+            await ledgerModel.create({
+                account: targetAccount._id,
+                amount,
+                transaction: transaction._id,
+                type: "CREDIT"
+            });
+
+            transaction.status = "COMPLETED";
+            await transaction.save();
+        } catch (error) {
+            if (transaction?._id) {
+                await transactionModel.findByIdAndUpdate(transaction._id, { status: "FAILED" });
+            }
+            throw new AppError("Deposit could not be completed, please retry", 500);
+        }
+    }
+
+    const newBalance = await targetAccount.getBalance();
+
+    res.status(201).json({
+        success: true,
+        data: {
+            message: `Successfully deposited ${amount} into account`,
+            transaction,
+            newBalance
+        },
+        error: null
+    });
+}
+
+/**
+ * - Lookup Account Controller
+ * - GET /api/account/lookup/:accountId
+ * Validates and retrieves the verified account holder details for fund transfers
+ */
+async function lookupAccountController(req, res) {
+    const { accountId } = req.params;
+
+    const account = await accountModel.findById(accountId).populate('user', 'name email');
+
+    if (!account) {
+        throw new AppError("Recipient account not found. Please check the Account ID.", 404);
+    }
+
+    const isOwnAccount = account.user ? account.user._id.toString() === req.user._id.toString() : false;
+
+    res.status(200).json({
+        success: true,
+        data: {
+            recipient: {
+                accountId: account._id,
+                holderName: account.user ? account.user.name : "System Reserve",
+                currency: account.currency,
+                status: account.status,
+                isOwnAccount,
+                canReceiveTransfers: account.status === "ACTIVE"
+            }
+        },
+        error: null
+    });
+}
+
 module.exports = {
     userAccountController,
     getUserAccountsController,
     getAccountBalanceController,
     getAccountSummaryController,
-    closeAccountController
+    closeAccountController,
+    depositFundsController,
+    lookupAccountController
 }

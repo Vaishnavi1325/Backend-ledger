@@ -14,6 +14,12 @@ const router = express.Router()
 router.post('/', authMiddleware.authMiddleware, validate(accountValidator.createAccountSchema), catchAsync(accountController.userAccountController));
 
 /**
+ * - POST /api/account/deposit
+ * - Deposit funds into an active account (double-entry credit from reserve)
+ */
+router.post('/deposit', authMiddleware.authMiddleware, validate(accountValidator.depositSchema), catchAsync(accountController.depositFundsController));
+
+/**
  * - GET /api/account/
  * - Get all accounts of the logged-in user with real-time balances
  */
@@ -24,6 +30,12 @@ router.get("/", authMiddleware.authMiddleware, catchAsync(accountController.getU
  * - Dashboard analytics: portfolio balance, inflow/outflow, recent transactions
  */
 router.get("/summary", authMiddleware.authMiddleware, catchAsync(accountController.getAccountSummaryController))
+
+/**
+ * - GET /api/account/lookup/:accountId
+ * - Verify recipient account existence and account holder name before transfers
+ */
+router.get("/lookup/:accountId", authMiddleware.authMiddleware, validate(accountValidator.accountIdParamsSchema, "params"), catchAsync(accountController.lookupAccountController))
 
 /**
  * - GET /api/account/balance/:accountId
