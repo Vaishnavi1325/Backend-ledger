@@ -1,15 +1,25 @@
 //work of app.js-> create a server and config the server(middlewares used and api endpoints used)
-const express=require('express')
-const cors=require('cors')
-const authRouter=require('./routes/auth.route');
-const accountRouter=require('./routes/account.route')
-const transactionRoutes=require('./routes/transaction.route')
-const adminRoutes=require('./routes/admin.route')
+const express = require('express')
+const cors = require('cors')
+const helmet = require('helmet')
+const authRouter = require('./routes/auth.route');
+const accountRouter = require('./routes/account.route')
+const transactionRoutes = require('./routes/transaction.route')
+const adminRoutes = require('./routes/admin.route')
 const cookieParser = require('cookie-parser');
-const notFound=require('./middlewares/notFound')
-const errorHandler=require('./middlewares/errorHandler')
+const notFound = require('./middlewares/notFound')
+const errorHandler = require('./middlewares/errorHandler')
+const { generalLimiter } = require('./middlewares/rateLimiter')
 
-const app=express();
+const app = express();
+
+// Set HTTP security headers with Cross-Origin Resource Policy configured for dev frontend
+app.use(helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" }
+}))
+
+// Apply general rate limiting across API routes
+app.use('/api', generalLimiter)
 
 // Allow the frontend to call this API from the browser.
 // credentials:true lets the auth cookie travel with cross-origin requests.

@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { getUserAccounts, getAccountSummary } from "@/lib/api/account";
 import { Navbar } from "@/components/layout/Navbar";
 import { SummaryCards } from "@/components/dashboard/SummaryCards";
+import { AnalyticsChart } from "@/components/dashboard/AnalyticsChart";
 import { AccountList } from "@/components/accounts/AccountList";
 import { TransferModal } from "@/components/transactions/TransferModal";
 import { DepositModal } from "@/components/accounts/DepositModal";
@@ -131,6 +132,15 @@ export default function DashboardPage() {
         {/* 1. Account Summaries & Analytics KPI Cards */}
         <section aria-labelledby="summary-heading">
           <SummaryCards summary={summary} isLoading={isLoadingSummary} />
+        </section>
+
+        {/* 1b. Cash Flow & Spending Analytics Chart */}
+        <section aria-labelledby="analytics-chart-heading">
+          <AnalyticsChart
+            summary={summary}
+            isLoading={isLoadingSummary}
+            userAccounts={accounts || []}
+          />
         </section>
 
         {/* Admin Controls Panel (Visible to Admins and Support staff) */}

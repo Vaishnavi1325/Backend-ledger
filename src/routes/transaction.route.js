@@ -5,16 +5,16 @@ const validate = require('../middlewares/validate')
 const catchAsync = require('../utils/catchAsync')
 const transactionValidator = require('../validators/transaction.validator')
 const checkOwnership = require('../middlewares/checkOwnership')
+const { transactionLimiter } = require('../middlewares/rateLimiter')
 
 const transactionRoutes = Router();
 
 /**
  * - POST /api/transactions/
  * - Create a new transaction
- * - Validate request body before reaching the controller
+ * - Protected by transactionLimiter, authMiddleware, and schema validation
  */
-
-transactionRoutes.post("/", authMiddleware.authMiddleware, validate(transactionValidator.createTransactionSchema), catchAsync(transactionController.createTransaction))
+transactionRoutes.post("/", authMiddleware.authMiddleware, transactionLimiter, validate(transactionValidator.createTransactionSchema), catchAsync(transactionController.createTransaction))
 
 
 /**
