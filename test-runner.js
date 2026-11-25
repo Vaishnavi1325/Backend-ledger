@@ -85,8 +85,34 @@ async function runTests() {
             password: 'password123'
         });
         assert(regA.status === 201 && regA.body.success, 'User A (Alice) registration');
-        const tokenA = regA.body.data.token;
+        let tokenA = regA.body.data.token;
         const userIdA = regA.body.data.user.id;
+
+        // 1b. Profile Management: GET /api/auth/me
+        const profileA = await makeRequest('GET', '/api/auth/me', null, tokenA);
+        assert(profileA.status === 200 && profileA.body.data.user.email === 'alice@bank.test', 'GET /api/auth/me returns current user profile');
+
+        // 1c. Password Management: Reject invalid current password
+        const wrongPass = await makeRequest('PATCH', '/api/auth/change-password', {
+            currentPassword: 'wrongpassword',
+            newPassword: 'newpassword123'
+        }, tokenA);
+        assert(wrongPass.status === 400, 'Change password rejects incorrect current password (400)');
+
+        // 1d. Password Management: Valid password update
+        const changePass = await makeRequest('PATCH', '/api/auth/change-password', {
+            currentPassword: 'password123',
+            newPassword: 'newpassword123'
+        }, tokenA);
+        assert(changePass.status === 200, 'Change password succeeds with valid credentials');
+
+        // 1e. Verify login works with the updated password
+        const loginNew = await makeRequest('POST', '/api/auth/login', {
+            email: 'alice@bank.test',
+            password: 'newpassword123'
+        });
+        assert(loginNew.status === 200, 'Login succeeds with the newly updated password');
+        tokenA = loginNew.body.data.token;
 
         // 2. Reject duplicate registration
         const regDup = await makeRequest('POST', '/api/auth/register', {
@@ -235,10 +261,27 @@ async function runTests() {
         const closeBobBlocked = await makeRequest('PATCH', `/api/account/${accountIdB}/close`, null, tokenB);
         assert(closeBobBlocked.status === 400, 'Closing account with positive balance blocked (400)');
 
-        // Create empty account for Bob and close it
-        const emptyAccBob = await makeRequest('POST', '/api/account', { currency: 'INR' }, tokenB);
-        const closeBobEmpty = await makeRequest('PATCH', `/api/account/${emptyAccBob.body.data.account._id}/close`, null, tokenB);
-        assert(closeBobEmpty.status === 200 && closeBobEmpty.body.data.account.status === 'CLOSED', 'Empty account closed successfully');
+        // 22. Transaction Reversal Engine:
+        // Customer forbidden from executing reversal
+        const validTxId = validTransfer.body.data.transaction._id;
+        const custReversalBlocked = await makeRequest('POST', `/api/transactions/${validTxId}/reverse`, null, tokenB);
+        assert(custReversalBlocked.status === 403, 'Customer forbidden from reversing transactions (403 Forbidden)');
+
+        // Admin/Staff executes double-entry reversal
+        const adminReversal = await makeRequest('POST', `/api/transactions/${validTxId}/reverse`, null, systemToken);
+        assert(adminReversal.status === 200 && adminReversal.body.data.originalTransaction.status === 'REVERSED', 'Admin executes double-entry transaction reversal');
+
+        // Check balances after reversal: Bob 0, Alice 5000
+        const balBRev = await makeRequest('GET', `/api/account/balance/${accountIdB}`, null, tokenB);
+        assert(balBRev.body.data.balance === 0, 'Bob balance reduced to 0 INR after reversal');
+
+        // Re-reversing blocked
+        const reReversalBlocked = await makeRequest('POST', `/api/transactions/${validTxId}/reverse`, null, systemToken);
+        assert(reReversalBlocked.status === 400, 'Re-reversing an already reversed transaction blocked (400)');
+
+        // Now Bob's account accountIdB has 0 balance and can be closed directly!
+        const closeBobNow = await makeRequest('PATCH', `/api/account/${accountIdB}/close`, null, tokenB);
+        assert(closeBobNow.status === 200 && closeBobNow.body.data.account.status === 'CLOSED', 'Bob account with 0 balance closed successfully');
 
         console.log('\n========================================');
         console.log(`🎉 ALL ${passedTests} BACKEND INTEGRATION TESTS PASSED!`);

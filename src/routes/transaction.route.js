@@ -1,9 +1,11 @@
 const { Router } = require('express');
 const authMiddleware = require('../middlewares/auth.middleware');
+const authorize = require('../middlewares/authorize');
 const transactionController = require("../controllers/transaction.controller")
 const validate = require('../middlewares/validate')
 const catchAsync = require('../utils/catchAsync')
 const transactionValidator = require('../validators/transaction.validator')
+const accountValidator = require('../validators/account.validator')
 const checkOwnership = require('../middlewares/checkOwnership')
 const { transactionLimiter } = require('../middlewares/rateLimiter')
 
@@ -22,6 +24,12 @@ transactionRoutes.post("/", authMiddleware.authMiddleware, transactionLimiter, v
  * - Create initial funds transaction from system user
  */
 transactionRoutes.post("/system/initial-funds", authMiddleware.authSystemUserMiddleware, validate(transactionValidator.initialFundsSchema), catchAsync(transactionController.createInitialFundsTransaction))
+
+/**
+ * - POST /api/transactions/:id/reverse
+ * - Double-entry transaction reversal (Admin and Support staff only)
+ */
+transactionRoutes.post("/:id/reverse", authMiddleware.authMiddleware, authorize("admin", "support"), validate(accountValidator.idParamsSchema, "params"), catchAsync(transactionController.reverseTransaction))
 
 /**
  * - GET /api/transactions/

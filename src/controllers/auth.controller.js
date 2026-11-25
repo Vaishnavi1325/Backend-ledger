@@ -116,9 +116,65 @@ async function userLogoutController(req, res) {
     })
 }
 
+/**
+ * - Get Current User Profile Controller
+ * - GET /api/auth/me
+ */
+async function getUserProfileController(req, res) {
+    const user = req.user;
+
+    res.status(200).json({
+        success: true,
+        data: {
+            user: {
+                id: user._id,
+                name: user.name,
+                email: user.email,
+                role: user.role,
+                createdAt: user.createdAt
+            }
+        },
+        error: null
+    });
+}
+
+/**
+ * - Change Password Controller
+ * - PATCH /api/auth/change-password
+ */
+async function changePasswordController(req, res) {
+    const { currentPassword, newPassword } = req.body;
+    const user = await userModel.findById(req.user._id).select("+password");
+
+    if (!user) {
+        throw new AppError("User not found", 404);
+    }
+
+    const isValidPassword = await user.comparePassword(currentPassword);
+    if (!isValidPassword) {
+        throw new AppError("Current password is incorrect.", 400);
+    }
+
+    if (currentPassword === newPassword) {
+        throw new AppError("New password must be different from current password.", 400);
+    }
+
+    user.password = newPassword;
+    await user.save();
+
+    res.status(200).json({
+        success: true,
+        data: {
+            message: "Password changed successfully."
+        },
+        error: null
+    });
+}
 
 module.exports = {
     userRegisterController,
     userLoginController,
-    userLogoutController
+    userLogoutController,
+    getUserProfileController,
+    changePasswordController
 }

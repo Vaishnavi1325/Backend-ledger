@@ -426,9 +426,160 @@ async function getAccountTransactions(req, res) {
     })
 }
 
+/**
+ * POST /api/transactions/:id/reverse
+ * Double-Entry Transaction Reversal Engine (Admin and Support only).
+ * Inverts the debit/credit pair and marks original transaction as REVERSED.
+ */
+async function reverseTransaction(req, res) {
+    const transactionId = req.params.id;
+
+    const originalTx = await transactionModel.findById(transactionId);
+    if (!originalTx) {
+        throw new AppError("Transaction not found", 404);
+    }
+
+    if (originalTx.status === "REVERSED") {
+        throw new AppError("Transaction has already been reversed.", 400);
+    }
+
+    if (originalTx.status !== "COMPLETED") {
+        throw new AppError(`Cannot reverse transaction with status ${originalTx.status}. Only COMPLETED transactions can be reversed.`, 400);
+    }
+
+    // Retrieve both accounts
+    const recipientAccount = await accountModel.findById(originalTx.toAccount);
+    const senderAccount = await accountModel.findById(originalTx.fromAccount);
+
+    if (!recipientAccount || !senderAccount) {
+        throw new AppError("Associated accounts for this transaction no longer exist.", 400);
+    }
+
+    // Recipient account must be active to allow debit refund
+    if (recipientAccount.status !== "ACTIVE") {
+        throw new AppError(`Cannot reverse: recipient account is ${recipientAccount.status}.`, 400);
+    }
+
+    // Check recipient's live derived balance
+    const recipientBalance = await recipientAccount.getBalance();
+    if (recipientBalance < originalTx.amount) {
+        throw new AppError(`Cannot reverse: recipient has insufficient balance (${recipientBalance}) to refund ${originalTx.amount}.`, 400);
+    }
+
+    const reversalIdempotencyKey = `reversal-${originalTx._id}`;
+
+    // Topology detection for ACID multi-document transactions vs atomic pipeline
+    let isReplicaSet = false;
+    try {
+        const client = mongoose.connection.getClient();
+        const topologyType = client.topology?.description?.type;
+        isReplicaSet = topologyType === "ReplicaSetWithPrimary" || topologyType === "Sharded";
+    } catch {
+        isReplicaSet = false;
+    }
+
+    let reversalTx;
+
+    if (isReplicaSet) {
+        const session = await mongoose.startSession();
+        session.startTransaction();
+
+        try {
+            reversalTx = await transactionModel.create([
+                {
+                    fromAccount: originalTx.toAccount,
+                    toAccount: originalTx.fromAccount,
+                    amount: originalTx.amount,
+                    status: "PENDING",
+                    idempotencyKey: reversalIdempotencyKey
+                }
+            ], { session });
+
+            reversalTx = reversalTx[0];
+
+            await ledgerModel.create([
+                {
+                    account: originalTx.toAccount,
+                    amount: originalTx.amount,
+                    transaction: reversalTx._id,
+                    type: "DEBIT"
+                }
+            ], { session });
+
+            await ledgerModel.create([
+                {
+                    account: originalTx.fromAccount,
+                    amount: originalTx.amount,
+                    transaction: reversalTx._id,
+                    type: "CREDIT"
+                }
+            ], { session });
+
+            reversalTx.status = "COMPLETED";
+            await reversalTx.save({ session });
+
+            originalTx.status = "REVERSED";
+            await originalTx.save({ session });
+
+            await session.commitTransaction();
+        } catch (error) {
+            await session.abortTransaction();
+            throw new AppError("Transaction reversal could not be completed, please retry", 500);
+        } finally {
+            session.endSession();
+        }
+    } else {
+        try {
+            reversalTx = await transactionModel.create({
+                fromAccount: originalTx.toAccount,
+                toAccount: originalTx.fromAccount,
+                amount: originalTx.amount,
+                status: "PENDING",
+                idempotencyKey: reversalIdempotencyKey
+            });
+
+            await ledgerModel.create({
+                account: originalTx.toAccount,
+                amount: originalTx.amount,
+                transaction: reversalTx._id,
+                type: "DEBIT"
+            });
+
+            await ledgerModel.create({
+                account: originalTx.fromAccount,
+                amount: originalTx.amount,
+                transaction: reversalTx._id,
+                type: "CREDIT"
+            });
+
+            reversalTx.status = "COMPLETED";
+            await reversalTx.save();
+
+            originalTx.status = "REVERSED";
+            await originalTx.save();
+        } catch (error) {
+            if (reversalTx?._id) {
+                await transactionModel.findByIdAndUpdate(reversalTx._id, { status: "FAILED" });
+            }
+            throw new AppError("Transaction reversal could not be completed, please retry", 500);
+        }
+    }
+
+    res.status(200).json({
+        success: true,
+        data: {
+            message: "Transaction successfully reversed.",
+            reversalTransaction: reversalTx,
+            originalTransaction: originalTx
+        },
+        error: null
+    });
+}
+
 module.exports = {
     createTransaction,
     createInitialFundsTransaction,
     getTransactions,
-    getAccountTransactions
+    getAccountTransactions,
+    reverseTransaction
 }

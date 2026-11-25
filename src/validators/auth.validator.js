@@ -31,7 +31,18 @@ const loginSchema = z.object({
         .min(1, "Password cannot be empty")
 }).strict()
 
+// PATCH /api/auth/change-password
+const changePasswordSchema = z.object({
+    currentPassword: z
+        .string("Current password is required")
+        .min(1, "Current password cannot be empty"),
+    newPassword: z
+        .string("New password is required")
+        .min(6, "New password must be at least 6 characters")
+}).strict()
+
 module.exports = {
     registerSchema,
-    loginSchema
+    loginSchema,
+    changePasswordSchema
 }
