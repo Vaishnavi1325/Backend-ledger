@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Landmark, LogOut, User as UserIcon, Settings } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { ProfileModal } from "@/components/profile/ProfileModal";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 
 export function Navbar({ onOpenTransfer }) {
     const { user, logout } = useAuth();
@@ -57,6 +58,8 @@ export function Navbar({ onOpenTransfer }) {
           >
             <Settings className="h-3.5 w-3.5"/>
           </Button>
+
+          <ThemeToggle />
 
           <Button variant="outline" size="sm" onClick={handleLogout} className="text-xs gap-1.5 h-8" title="Sign out of your account">
             <LogOut className="h-3.5 w-3.5"/>

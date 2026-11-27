@@ -13,9 +13,11 @@ const mongoose = require('mongoose')
 async function userAccountController(req, res) {
     const user = req.user;
     const currency = req.body?.currency || "INR";
+    const accountNumber = await accountModel.generateUniqueAccountNumber();
 
     const account = await accountModel.create({
         user: user._id,
+        accountNumber,
         currency
     });
 
@@ -24,6 +26,7 @@ async function userAccountController(req, res) {
         data: {
             account: {
                 _id: account._id,
+                accountNumber: account.accountNumber,
                 user: account.user,
                 status: account.status,
                 currency: account.currency,
@@ -49,6 +52,7 @@ async function getUserAccountsController(req, res) {
             const balance = await account.getBalance();
             return {
                 _id: account._id,
+                accountNumber: account.accountNumber,
                 user: account.user,
                 status: account.status,
                 currency: account.currency,
@@ -103,6 +107,7 @@ async function getAccountSummaryController(req, res) {
             const balance = await account.getBalance();
             return {
                 _id: account._id,
+                accountNumber: account.accountNumber,
                 status: account.status,
                 currency: account.currency,
                 balance,
@@ -194,7 +199,18 @@ async function closeAccountController(req, res) {
 async function depositFundsController(req, res) {
     const { accountId, amount, idempotencyKey } = req.body;
 
-    const targetAccount = await accountModel.findById(accountId);
+    if (!accountId || typeof accountId !== "string" || !accountId.trim()) {
+        throw new AppError("A valid target accountId or accountNumber is required", 400);
+    }
+    const sanitizedId = accountId.trim();
+
+    let targetAccount;
+    if (mongoose.Types.ObjectId.isValid(sanitizedId) && sanitizedId.length === 24) {
+        targetAccount = await accountModel.findById(sanitizedId);
+    } else {
+        targetAccount = await accountModel.findOne({ accountNumber: sanitizedId });
+    }
+
     if (!targetAccount) {
         throw new AppError("Target account not found", 404);
     }
@@ -341,10 +357,15 @@ async function depositFundsController(req, res) {
 async function lookupAccountController(req, res) {
     const { accountId } = req.params;
 
-    const account = await accountModel.findById(accountId).populate('user', 'name email');
+    let account;
+    if (mongoose.Types.ObjectId.isValid(accountId) && accountId.length === 24) {
+        account = await accountModel.findById(accountId).populate('user', 'name email');
+    } else {
+        account = await accountModel.findOne({ accountNumber: accountId }).populate('user', 'name email');
+    }
 
     if (!account) {
-        throw new AppError("Recipient account not found. Please check the Account ID.", 404);
+        throw new AppError("Recipient account not found. Please check the Account Number or ID.", 404);
     }
 
     const isOwnAccount = account.user ? account.user._id.toString() === req.user._id.toString() : false;
@@ -354,6 +375,7 @@ async function lookupAccountController(req, res) {
         data: {
             recipient: {
                 accountId: account._id,
+                accountNumber: account.accountNumber,
                 holderName: account.user ? account.user.name : "System Reserve",
                 currency: account.currency,
                 status: account.status,

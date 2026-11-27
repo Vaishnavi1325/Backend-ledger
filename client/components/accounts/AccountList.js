@@ -32,10 +32,10 @@ export function AccountList({ accounts, isLoading, onSelectTransferFrom, onSelec
             toast.error(msg, "Closure Blocked");
         },
     });
-    function handleCopy(id) {
-        navigator.clipboard.writeText(id);
-        setCopiedId(id);
-        toast.info(`Account ID ...${id.slice(-6)} copied to clipboard.`, "Copied");
+    function handleCopy(text, label = "Account ID") {
+        navigator.clipboard.writeText(text);
+        setCopiedId(text);
+        toast.info(`${label} copied to clipboard!`, "Copied");
         setTimeout(() => setCopiedId(null), 2000);
     }
     function handleClose(id) {
@@ -120,19 +120,50 @@ export function AccountList({ accounts, isLoading, onSelectTransferFrom, onSelec
                       </Badge>)}
                   </div>
 
-                  <div className="flex items-center justify-between text-xs text-muted-foreground pt-1">
-                    <span className="font-mono text-[11px] truncate max-w-[170px]" title={account._id}>
-                      ID: {account._id}
-                    </span>
-                    <button onClick={() => handleCopy(account._id)} className="inline-flex items-center gap-1 hover:text-foreground transition-colors p-1 rounded-sm" title="Copy Account ID">
-                      {copiedId === account._id ? (<>
-                          <Check className="h-3 w-3 text-emerald-600"/>
+                  {/* Dedicated Account Number Box */}
+                  <div className="space-y-1.5 pt-2 border-t border-border/40 mt-1">
+                    <div className="flex items-center justify-between text-xs bg-muted/50 px-2.5 py-1.5 rounded-md border border-border/50">
+                      <div className="flex flex-col">
+                        <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Account Number</span>
+                        <span className="font-mono text-sm font-bold text-foreground tracking-wide">
+                          {account.accountNumber || account._id}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => handleCopy(account.accountNumber || account._id, "Account Number")}
+                        className="inline-flex items-center gap-1 hover:text-foreground text-muted-foreground transition-colors p-1 rounded-sm"
+                        title="Copy Account Number"
+                      >
+                        {copiedId === (account.accountNumber || account._id) ? (
+                          <>
+                            <Check className="h-3.5 w-3.5 text-emerald-600" />
+                            <span className="text-[10px] text-emerald-600 font-medium">Copied</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="h-3.5 w-3.5" />
+                            <span className="text-[10px]">Copy</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[11px] text-muted-foreground px-0.5">
+                      <span className="font-mono text-[10px] text-muted-foreground/80" title={account._id}>
+                        System ID: ...{account._id.slice(-8)}
+                      </span>
+                      <button
+                        onClick={() => handleCopy(account._id, "Internal System ID")}
+                        className="inline-flex items-center gap-1 hover:text-foreground transition-colors p-0.5 rounded-sm"
+                        title="Copy full 24-character ID"
+                      >
+                        {copiedId === account._id ? (
                           <span className="text-[10px] text-emerald-600 font-medium">Copied</span>
-                        </>) : (<>
-                          <Copy className="h-3 w-3"/>
-                          <span className="text-[10px]">Copy</span>
-                        </>)}
-                    </button>
+                        ) : (
+                          <span className="text-[10px] underline decoration-dotted">Copy System ID</span>
+                        )}
+                      </button>
+                    </div>
                   </div>
                 </CardHeader>
 

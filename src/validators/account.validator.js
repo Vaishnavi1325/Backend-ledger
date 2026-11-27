@@ -13,6 +13,16 @@ const objectIdSchema = z
         return mongoose.Types.ObjectId.isValid(value)
     }, "Invalid id format")
 
+// A flexible rule accepting either a 24-character hexadecimal ObjectId or a 10-digit Account Number.
+const accountIdentifierSchema = z
+    .string("Account identifier must be a string")
+    .trim()
+    .refine(function (value) {
+        const isObjectId = mongoose.Types.ObjectId.isValid(value) && value.length === 24;
+        const isAccNum = /^\d{10}$/.test(value);
+        return isObjectId || isAccNum;
+    }, "Invalid account format (must be 24-character ID or 10-digit Account Number)")
+
 // POST /api/account/ (optional request body for currency selection)
 const createAccountSchema = z.object({
     currency: z.enum(["INR", "USD", "EUR", "GBP"]).default("INR").optional()
@@ -20,7 +30,7 @@ const createAccountSchema = z.object({
 
 // POST /api/account/deposit (self-service or simulated deposit into own account)
 const depositSchema = z.object({
-    accountId: objectIdSchema,
+    accountId: accountIdentifierSchema,
     amount: z
         .number("Amount must be a number")
         .positive("Amount must be greater than 0")
@@ -35,16 +45,17 @@ const depositSchema = z.object({
 
 // GET /api/account/balance/:accountId (validates req.params)
 const accountIdParamsSchema = z.object({
-    accountId: objectIdSchema
+    accountId: accountIdentifierSchema
 }).strict()
 
 // Admin routes like /api/admin/accounts/:id (validates req.params)
 const idParamsSchema = z.object({
-    id: objectIdSchema
+    id: accountIdentifierSchema
 }).strict()
 
 module.exports = {
     objectIdSchema,
+    accountIdentifierSchema,
     createAccountSchema,
     depositSchema,
     accountIdParamsSchema,

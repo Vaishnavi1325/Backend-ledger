@@ -11,6 +11,7 @@ const accountModel = require('./src/models/account.model');
 const transactionModel = require('./src/models/transaction.model');
 const ledgerModel = require('./src/models/ledger.model');
 const tokenBlackListModel = require('./src/models/blackList.model');
+const otpModel = require('./src/models/otp.model');
 const jwt = require('jsonwebtoken');
 
 let server;
@@ -149,15 +150,22 @@ async function runTests() {
         const accA = await makeRequest('POST', '/api/account', { currency: 'INR' }, tokenA);
         assert(accA.status === 201 && accA.body.data.account, 'Create account for Alice');
         const accountIdA = accA.body.data.account._id;
+        const accountNumA = accA.body.data.account.accountNumber;
 
         // 6. Create Account for Bob
         const accB = await makeRequest('POST', '/api/account', { currency: 'INR' }, tokenB);
         assert(accB.status === 201 && accB.body.data.account, 'Create account for Bob');
         const accountIdB = accB.body.data.account._id;
+        const accountNumB = accB.body.data.account.accountNumber;
 
-        // 6b. Recipient Name Lookup & Verification
+        assert(accountNumA && accountNumB && accountNumA !== accountNumB, 'Every account has a distinct guaranteed-unique 10-digit Account Number');
+
+        // 6b. Recipient Name Lookup & Verification by ID and by Account Number
         const lookupBob = await makeRequest('GET', `/api/account/lookup/${accountIdB}`, null, tokenA);
-        assert(lookupBob.status === 200 && lookupBob.body.data.recipient.holderName === 'Bob Ledger' && !lookupBob.body.data.recipient.isOwnAccount && lookupBob.body.data.recipient.canReceiveTransfers, 'Recipient lookup verifies Bob name and active status');
+        assert(lookupBob.status === 200 && lookupBob.body.data.recipient.holderName === 'Bob Ledger' && !lookupBob.body.data.recipient.isOwnAccount && lookupBob.body.data.recipient.canReceiveTransfers, 'Recipient lookup verifies Bob name and active status by ID');
+
+        const lookupBobByNum = await makeRequest('GET', `/api/account/lookup/${accountNumB}`, null, tokenA);
+        assert(lookupBobByNum.status === 200 && lookupBobByNum.body.data.recipient.holderName === 'Bob Ledger' && lookupBobByNum.body.data.recipient.accountNumber === accountNumB, 'Recipient lookup verifies Bob by unique 10-digit Account Number');
 
         const lookupSelf = await makeRequest('GET', `/api/account/lookup/${accountIdA}`, null, tokenA);
         assert(lookupSelf.status === 200 && lookupSelf.body.data.recipient.isOwnAccount, 'Recipient lookup detects self-account');
@@ -200,19 +208,19 @@ async function runTests() {
         }, tokenA);
         assert(overdraftTransfer.status === 400, 'Overdraft blocked: Insufficient balance (400)');
 
-        // 12. Valid Transfer: Alice transfers 1500 to Bob
+        // 12. Valid Transfer: Alice transfers 1500 to Bob using Bob's 10-digit Account Number
         const validTransfer = await makeRequest('POST', '/api/transactions', {
             fromAccount: accountIdA,
-            toAccount: accountIdB,
+            toAccount: accountNumB,
             amount: 1500,
             idempotencyKey: 'transfer-alice-bob-001'
         }, tokenA);
-        assert(validTransfer.status === 201 && validTransfer.body.success, 'Atomic transfer (1500 INR) Alice -> Bob succeeded');
+        assert(validTransfer.status === 201 && validTransfer.body.success, 'Atomic transfer (1500 INR) Alice -> Bob using unique 10-digit Account Number succeeded');
 
         // 13. Test Idempotency: Repeating exact same request returns cached transaction without duplicate debit
         const repeatTransfer = await makeRequest('POST', '/api/transactions', {
             fromAccount: accountIdA,
-            toAccount: accountIdB,
+            toAccount: accountNumB,
             amount: 1500,
             idempotencyKey: 'transfer-alice-bob-001'
         }, tokenA);
@@ -282,6 +290,97 @@ async function runTests() {
         // Now Bob's account accountIdB has 0 balance and can be closed directly!
         const closeBobNow = await makeRequest('PATCH', `/api/account/${accountIdB}/close`, null, tokenB);
         assert(closeBobNow.status === 200 && closeBobNow.body.data.account.status === 'CLOSED', 'Bob account with 0 balance closed successfully');
+
+        // 23. Test Multi-Account Balance Isolation & Self-Transfer
+        // Alice logs back in with valid password
+        const aliceLogin = await makeRequest('POST', '/api/auth/login', {
+            email: 'alice@bank.test',
+            password: 'newpassword123'
+        });
+        assert(aliceLogin.status === 200, 'Alice logs back in with valid password');
+        const freshTokenA = aliceLogin.body.data.token;
+
+        // Alice creates a 3rd distinct account (USD)
+        const accA3 = await makeRequest('POST', '/api/account', { currency: 'USD' }, freshTokenA);
+        assert(accA3.status === 201 && accA3.body.data.account, 'Alice creates a distinct USD account');
+        const accountIdA3 = accA3.body.data.account._id;
+        const accountNumA3 = accA3.body.data.account.accountNumber;
+        assert(accountNumA3 !== accountNumA, 'USD account has a distinct Account Number from primary account');
+
+        // Deposit 2000 into Alice's USD account
+        const depA3 = await makeRequest('POST', '/api/account/deposit', {
+            accountId: accountIdA3,
+            amount: 2000,
+            idempotencyKey: 'dep-a3-usd-test'
+        }, freshTokenA);
+        assert(depA3.status === 201 && depA3.body.data.newBalance === 2000, 'Successfully deposited 2000 into USD account');
+
+        // Verify Account A (primary) balance is unchanged and USD account balance is 2000 (Strict isolation)
+        const checkBalPrimary = await makeRequest('GET', `/api/account/balance/${accountIdA}`, null, freshTokenA);
+        const checkBalUSD = await makeRequest('GET', `/api/account/balance/${accountIdA3}`, null, freshTokenA);
+        assert(checkBalPrimary.body.data.balance === 5000, 'Primary account balance remains 5000 (no balance leak)');
+        assert(checkBalUSD.body.data.balance === 2000, 'USD account balance is exactly 2000');
+
+        // 24. Test Gmail OTP Forgot Password & Reset Password Flow
+        // Request forgot password code
+        const forgotReq = await makeRequest('POST', '/api/auth/forgot-password', {
+            email: 'alice@bank.test'
+        });
+        assert(forgotReq.status === 200 && forgotReq.body.success, 'POST /api/auth/forgot-password dispatches OTP');
+        const resetOtpDoc = await otpModel.findOne({ email: 'alice@bank.test', purpose: 'FORGOT_PASSWORD' });
+        assert(resetOtpDoc && resetOtpDoc.otp.length === 6, 'Generated 6-digit OTP stored in database');
+
+        // Reset password using OTP
+        const resetReq = await makeRequest('POST', '/api/auth/reset-password', {
+            email: 'alice@bank.test',
+            otp: resetOtpDoc.otp,
+            newPassword: 'newsecurepassword999'
+        });
+        assert(resetReq.status === 200 && resetReq.body.success, 'POST /api/auth/reset-password updates password');
+
+        // Old password rejected
+        const oldPassLogin = await makeRequest('POST', '/api/auth/login', {
+            email: 'alice@bank.test',
+            password: 'newpassword123'
+        });
+        assert(oldPassLogin.status === 401, 'Old password rejected after reset (401)');
+
+        // New password accepted
+        const newPassLogin = await makeRequest('POST', '/api/auth/login', {
+            email: 'alice@bank.test',
+            password: 'newsecurepassword999'
+        });
+        assert(newPassLogin.status === 200, 'New password accepted for login');
+
+        // 25. Test Verified Registration with OTP
+        const regOtpReq = await makeRequest('POST', '/api/auth/send-otp', {
+            email: 'charlie@bank.test',
+            purpose: 'REGISTRATION'
+        });
+        assert(regOtpReq.status === 200 && regOtpReq.body.success, 'POST /api/auth/send-otp dispatches registration code');
+        const charlieOtp = (await otpModel.findOne({ email: 'charlie@bank.test', purpose: 'REGISTRATION' })).otp;
+
+        const regWithOtpRes = await makeRequest('POST', '/api/auth/register-with-otp', {
+            name: 'Charlie Test',
+            email: 'charlie@bank.test',
+            password: 'charliepass123',
+            otp: charlieOtp
+        });
+        assert(regWithOtpRes.status === 201 && regWithOtpRes.body.data.token, 'Verified registration with OTP creates user and logs in');
+
+        // 26. Test Passwordless Gmail OTP Login
+        const loginOtpReq = await makeRequest('POST', '/api/auth/send-otp', {
+            email: 'charlie@bank.test',
+            purpose: 'LOGIN'
+        });
+        assert(loginOtpReq.status === 200 && loginOtpReq.body.success, 'POST /api/auth/send-otp dispatches login code');
+        const charlieLoginOtp = (await otpModel.findOne({ email: 'charlie@bank.test', purpose: 'LOGIN' })).otp;
+
+        const verifyLoginRes = await makeRequest('POST', '/api/auth/verify-otp-login', {
+            email: 'charlie@bank.test',
+            otp: charlieLoginOtp
+        });
+        assert(verifyLoginRes.status === 200 && verifyLoginRes.body.data.user.email === 'charlie@bank.test', 'Passwordless OTP verification logs user in');
 
         console.log('\n========================================');
         console.log(`🎉 ALL ${passedTests} BACKEND INTEGRATION TESTS PASSED!`);

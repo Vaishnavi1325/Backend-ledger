@@ -72,15 +72,15 @@ export function TransferModal({
       setToAccount("");
       setRecipientData(null);
       setLookupError(null);
-      if (selectedFromId) {
+      if (selectedFromId && activeAccounts.some((a) => a._id === selectedFromId)) {
         setFromAccount(selectedFromId);
-      } else if (activeAccounts.length > 0 && !fromAccount) {
+      } else if (activeAccounts.length > 0) {
         setFromAccount(activeAccounts[0]._id);
       }
     }
   }, [open, selectedFromId]);
 
-  // Live recipient lookup when toAccount is a valid 24-character hexadecimal ID
+  // Live recipient lookup when toAccount is a valid 10-digit Account Number or 24-character hexadecimal ID
   useEffect(() => {
     const trimmed = toAccount.trim();
 
@@ -91,18 +91,19 @@ export function TransferModal({
       return;
     }
 
-    if (trimmed.length < 24) {
-      setRecipientData(null);
-      setLookupError(null);
-      setIsLookingUp(false);
-      return;
-    }
+    const is10Digit = /^\d{10}$/.test(trimmed);
+    const is24Hex = /^[0-9a-fA-F]{24}$/.test(trimmed);
 
-    const isValidHex = /^[0-9a-fA-F]{24}$/.test(trimmed);
-    if (!isValidHex) {
-      setRecipientData(null);
-      setLookupError("Invalid Account ID format (must be 24 hex characters).");
-      setIsLookingUp(false);
+    if (!is10Digit && !is24Hex) {
+      if (trimmed.length > 24 || (trimmed.length >= 10 && !/^\d+$/.test(trimmed))) {
+        setRecipientData(null);
+        setLookupError("Invalid format: enter a 10-digit Account Number or 24-character Account ID.");
+        setIsLookingUp(false);
+      } else {
+        setRecipientData(null);
+        setLookupError(null);
+        setIsLookingUp(false);
+      }
       return;
     }
 
@@ -191,11 +192,17 @@ export function TransferModal({
 
     const trimmedTo = toAccount.trim();
     if (!trimmedTo) {
-      setErrorMsg("Please provide a destination account ID.");
+      setErrorMsg("Please provide a destination Account Number or ID.");
       return false;
     }
 
-    if (fromAccount === trimmedTo) {
+    const isSameAccount =
+      fromAccount === trimmedTo ||
+      (selectedAccount?.accountNumber && selectedAccount.accountNumber === trimmedTo) ||
+      (recipientData?.accountId && recipientData.accountId === fromAccount) ||
+      (recipientData?.accountNumber && selectedAccount?.accountNumber && recipientData.accountNumber === selectedAccount.accountNumber);
+
+    if (isSameAccount) {
       setErrorMsg("Source and destination accounts cannot be identical.");
       return false;
     }
@@ -313,7 +320,7 @@ export function TransferModal({
               >
                 {activeAccounts.map((acc) => (
                   <option key={acc._id} value={acc._id}>
-                    {acc.currency} — ID: ...{acc._id.slice(-6)} (Balance:{" "}
+                    {acc.currency} — {acc.accountNumber ? `Acc #${acc.accountNumber}` : `ID: ...${acc._id.slice(-6)}`} (Balance:{" "}
                     {formatCurrency(acc.balance)})
                   </option>
                 ))}
@@ -331,7 +338,7 @@ export function TransferModal({
             {/* To Account with Live Verification */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <Label htmlFor="toAccount">To Account ID (Destination)</Label>
+                <Label htmlFor="toAccount">Recipient Account (Number or ID)</Label>
                 {isLookingUp && (
                   <span className="flex items-center gap-1 text-[11px] text-muted-foreground animate-pulse">
                     <Loader2 className="h-3 w-3 animate-spin text-primary" />
@@ -341,17 +348,61 @@ export function TransferModal({
               </div>
               <Input
                 id="toAccount"
-                placeholder="e.g. 6b03cb14800d96690de2b054"
+                placeholder="e.g. 7484821929 (10-digit) or 6b0734..."
                 value={toAccount}
                 onChange={(e) => setToAccount(e.target.value)}
                 disabled={mutation.isPending}
                 required
               />
 
+              {/* Quick helper for self-transfer when user has multiple accounts */}
+              {activeAccounts.length > 1 && (
+                <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                  <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">
+                    My Other Accounts:
+                  </span>
+                  {activeAccounts
+                    .filter((a) => a._id !== fromAccount)
+                    .map((acc) => (
+                      <button
+                        key={acc._id}
+                        type="button"
+                        onClick={() => setToAccount(acc.accountNumber || acc._id)}
+                        className="text-[11px] px-2 py-0.5 rounded border bg-muted/60 hover:bg-muted hover:border-primary/50 text-foreground transition-colors cursor-pointer"
+                        title={`Quick select Acc #${acc.accountNumber || acc._id}`}
+                      >
+                        {acc.currency} (Acc #{acc.accountNumber || `...${acc._id.slice(-6)}`})
+                      </button>
+                    ))}
+                </div>
+              )}
+
+              {/* Quick transfer chips between own accounts */}
+              {activeAccounts.length > 1 && (
+                <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                  <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">
+                    My Other Accounts:
+                  </span>
+                  {activeAccounts
+                    .filter((a) => a._id !== fromAccount)
+                    .map((acc) => (
+                      <button
+                        key={acc._id}
+                        type="button"
+                        onClick={() => setToAccount(acc.accountNumber || acc._id)}
+                        className="text-[11px] px-2 py-0.5 rounded border bg-muted/60 hover:bg-muted hover:border-primary/50 text-foreground transition-colors cursor-pointer"
+                        title={`Select Acc #${acc.accountNumber || acc._id}`}
+                      >
+                        {acc.currency} (Acc #{acc.accountNumber || acc._id.slice(-6)})
+                      </button>
+                    ))}
+                </div>
+              )}
+
               {/* Lookup Feedback UI */}
               {recipientData && (
                 <div
-                  className={`p-3 rounded-lg border text-xs space-y-1 mt-1.5 transition-all ${
+                  className={`p-3 rounded-lg border text-xs space-y-1.5 mt-1.5 transition-all ${
                     recipientData.canReceiveTransfers
                       ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-950 dark:text-emerald-100"
                       : "bg-destructive/10 border-destructive/30 text-destructive"
@@ -361,7 +412,7 @@ export function TransferModal({
                     <div className="flex items-center gap-1.5 font-medium">
                       <UserCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                       <span>
-                        Verified Name: <strong>{recipientData.holderName}</strong>
+                        Verified Holder: <strong>{recipientData.holderName}</strong>
                       </span>
                     </div>
                     <span
@@ -374,8 +425,16 @@ export function TransferModal({
                       {recipientData.status}
                     </span>
                   </div>
+
+                  {recipientData.accountNumber && (
+                    <div className="text-[11px] font-mono text-muted-foreground flex items-center justify-between">
+                      <span>Account Number:</span>
+                      <strong className="text-foreground tracking-wide font-bold">{recipientData.accountNumber}</strong>
+                    </div>
+                  )}
+
                   <div className="text-[11px] opacity-80 flex items-center justify-between">
-                    <span>Account Currency: {recipientData.currency}</span>
+                    <span>Currency: {recipientData.currency}</span>
                     {recipientData.isOwnAccount && (
                       <span className="font-semibold text-primary">Self Transfer</span>
                     )}
@@ -397,7 +456,7 @@ export function TransferModal({
 
               {!recipientData && !lookupError && (
                 <p className="text-[11px] text-muted-foreground">
-                  Paste the 24-character ID. The recipient's verified name will be shown automatically.
+                  Enter recipient's 10-digit Account Number or 24-character ID. The verified name will appear automatically.
                 </p>
               )}
             </div>
@@ -466,7 +525,7 @@ export function TransferModal({
                     From Account
                   </span>
                   <span className="font-mono text-foreground font-medium">
-                    ...{fromAccount.slice(-8)}
+                    {selectedAccount?.accountNumber ? `Acc #${selectedAccount.accountNumber}` : `...${fromAccount.slice(-8)}`}
                   </span>
                 </div>
 
@@ -481,9 +540,9 @@ export function TransferModal({
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">To Account ID</span>
-                  <span className="font-mono text-foreground">
-                    ...{toAccount.trim().slice(-8)}
+                  <span className="text-muted-foreground">To Account</span>
+                  <span className="font-mono text-foreground font-medium">
+                    {recipientData?.accountNumber ? `Acc #${recipientData.accountNumber}` : toAccount.trim()}
                   </span>
                 </div>
 

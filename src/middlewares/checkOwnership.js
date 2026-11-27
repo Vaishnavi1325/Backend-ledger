@@ -1,3 +1,4 @@
+const mongoose = require('mongoose')
 const accountModel = require('../models/account.model')
 const AppError = require('../utils/AppError')
 const catchAsync = require('../utils/catchAsync')
@@ -25,7 +26,12 @@ function checkOwnership(paramName = "accountId") {
 
         const accountId = req.params[paramName]
 
-        const account = await accountModel.findById(accountId)
+        let account
+        if (mongoose.Types.ObjectId.isValid(accountId) && accountId.length === 24) {
+            account = await accountModel.findById(accountId)
+        } else {
+            account = await accountModel.findOne({ accountNumber: accountId })
+        }
 
         if (!account) {
             return next(new AppError("Account not found", 404))

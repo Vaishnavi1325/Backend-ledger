@@ -1,5 +1,5 @@
 const { z } = require('zod')
-const { objectIdSchema } = require('./account.validator')
+const { objectIdSchema, accountIdentifierSchema } = require('./account.validator')
 
 /**
  * Validation schemas for transaction routes.
@@ -18,8 +18,8 @@ const amountSchema = z
 
 // POST /api/transactions/
 const createTransactionSchema = z.object({
-    fromAccount: objectIdSchema,
-    toAccount: objectIdSchema,
+    fromAccount: accountIdentifierSchema,
+    toAccount: accountIdentifierSchema,
     amount: amountSchema,
     idempotencyKey: z
         .string("Idempotency key is required")
@@ -29,7 +29,7 @@ const createTransactionSchema = z.object({
 
 // POST /api/transactions/system/initial-funds
 const initialFundsSchema = z.object({
-    toAccount: objectIdSchema,
+    toAccount: accountIdentifierSchema,
     amount: amountSchema,
     idempotencyKey: z
         .string("Idempotency key is required")
@@ -105,7 +105,7 @@ const transactionQuerySchema = z.object({
 
 // GET /api/transactions/account/:accountId (validates req.params)
 const accountTransactionParamsSchema = z.object({
-    accountId: objectIdSchema
+    accountId: accountIdentifierSchema
 }).strict()
 
 module.exports = {

@@ -29,17 +29,27 @@ async function createTransaction(req, res) {
      */
     const { fromAccount, toAccount, amount, idempotencyKey } = req.body
 
-    const fromUserAccount = await accountModel.findOne({
-        _id: fromAccount,
-    })
+    const findAccount = async (identifier) => {
+        if (mongoose.Types.ObjectId.isValid(identifier) && identifier.toString().length === 24) {
+            const byId = await accountModel.findById(identifier);
+            if (byId) return byId;
+        }
+        return await accountModel.findOne({ accountNumber: identifier });
+    };
 
-    const toUserAccount = await accountModel.findOne({
-        _id: toAccount,
-    })
+    const fromUserAccount = await findAccount(fromAccount);
+    const toUserAccount = await findAccount(toAccount);
 
     if (!fromUserAccount || !toUserAccount) {
-        throw new AppError("Invalid fromAccount or toAccount", 400)
+        throw new AppError("Invalid fromAccount or toAccount", 400);
     }
+
+    if (fromUserAccount._id.toString() === toUserAccount._id.toString()) {
+        throw new AppError("Source and destination accounts cannot be identical", 400);
+    }
+
+    const fromAccountId = fromUserAccount._id;
+    const toAccountId = toUserAccount._id;
 
     // Prevent IDOR: customers can only send money from their own accounts.
     // Admins bypass this so they can act on any account when needed.
@@ -125,22 +135,22 @@ async function createTransaction(req, res) {
             session.startTransaction()
 
             transaction = (await transactionModel.create([{
-                fromAccount,
-                toAccount,
+                fromAccount: fromAccountId,
+                toAccount: toAccountId,
                 amount,
                 idempotencyKey,
                 status: "PENDING"
             }], { session }))[0]
 
             await ledgerModel.create([{
-                account: fromAccount,
+                account: fromAccountId,
                 amount: amount,
                 transaction: transaction._id,
                 type: "DEBIT"
             }], { session })
 
             await ledgerModel.create([{
-                account: toAccount,
+                account: toAccountId,
                 amount: amount,
                 transaction: transaction._id,
                 type: "CREDIT"
@@ -162,22 +172,22 @@ async function createTransaction(req, res) {
     } else {
         try {
             transaction = await transactionModel.create({
-                fromAccount,
-                toAccount,
+                fromAccount: fromAccountId,
+                toAccount: toAccountId,
                 amount,
                 idempotencyKey,
                 status: "PENDING"
             })
 
             await ledgerModel.create({
-                account: fromAccount,
+                account: fromAccountId,
                 amount: amount,
                 transaction: transaction._id,
                 type: "DEBIT"
             })
 
             await ledgerModel.create({
-                account: toAccount,
+                account: toAccountId,
                 amount: amount,
                 transaction: transaction._id,
                 type: "CREDIT"
@@ -217,9 +227,9 @@ async function createTransaction(req, res) {
 async function createInitialFundsTransaction(req, res) {
     const { toAccount, amount, idempotencyKey } = req.body
 
-    const toUserAccount = await accountModel.findOne({
-        _id: toAccount,
-    })
+    const toUserAccount = await (mongoose.Types.ObjectId.isValid(toAccount) && toAccount.toString().length === 24
+        ? accountModel.findById(toAccount)
+        : accountModel.findOne({ accountNumber: toAccount }))
 
     if (!toUserAccount) {
         throw new AppError("Invalid toAccount", 400)
@@ -250,7 +260,7 @@ async function createInitialFundsTransaction(req, res) {
 
             transaction = (await transactionModel.create([{
                 fromAccount: fromUserAccount._id,
-                toAccount,
+                toAccount: toUserAccount._id,
                 amount,
                 idempotencyKey,
                 status: "PENDING"
@@ -264,7 +274,7 @@ async function createInitialFundsTransaction(req, res) {
             }], { session })
 
             await ledgerModel.create([{
-                account: toAccount,
+                account: toUserAccount._id,
                 amount: amount,
                 transaction: transaction._id,
                 type: "CREDIT"
@@ -287,7 +297,7 @@ async function createInitialFundsTransaction(req, res) {
         try {
             transaction = await transactionModel.create({
                 fromAccount: fromUserAccount._id,
-                toAccount,
+                toAccount: toUserAccount._id,
                 amount,
                 idempotencyKey,
                 status: "PENDING"
@@ -301,7 +311,7 @@ async function createInitialFundsTransaction(req, res) {
             })
 
             await ledgerModel.create({
-                account: toAccount,
+                account: toUserAccount._id,
                 amount: amount,
                 transaction: transaction._id,
                 type: "CREDIT"
@@ -408,7 +418,7 @@ async function getAccountTransactions(req, res) {
     const filter = buildTransactionFilter(filterParams)
 
     // Show transactions where this account is sender or receiver
-    const accountId = req.params.accountId
+    const accountId = req.account ? req.account._id : req.params.accountId
     filter.$or = [
         { fromAccount: accountId },
         { toAccount: accountId }

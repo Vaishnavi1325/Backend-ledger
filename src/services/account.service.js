@@ -1,3 +1,4 @@
+const mongoose = require('mongoose')
 const accountModel = require('../models/account.model')
 const AppError = require('../utils/AppError')
 
@@ -7,9 +8,16 @@ const AppError = require('../utils/AppError')
  * anything else tomorrow) goes through the same rules.
  */
 
+async function findAccountByIdOrNumber(identifier) {
+    if (mongoose.Types.ObjectId.isValid(identifier) && identifier.length === 24) {
+        return accountModel.findById(identifier)
+    }
+    return accountModel.findOne({ accountNumber: identifier })
+}
+
 // Freeze an account so it can no longer send or receive money
 async function freezeAccount(accountId) {
-    const account = await accountModel.findById(accountId)
+    const account = await findAccountByIdOrNumber(accountId)
 
     if (!account) {
         throw new AppError("Account not found", 404)
@@ -28,7 +36,7 @@ async function freezeAccount(accountId) {
 
 // Unfreeze a frozen account and make it usable again
 async function unfreezeAccount(accountId) {
-    const account = await accountModel.findById(accountId)
+    const account = await findAccountByIdOrNumber(accountId)
 
     if (!account) {
         throw new AppError("Account not found", 404)
@@ -46,7 +54,7 @@ async function unfreezeAccount(accountId) {
 
 // Close an account (permanently shuts it, requires zero balance)
 async function closeAccount(accountId, userId) {
-    const account = await accountModel.findById(accountId)
+    const account = await findAccountByIdOrNumber(accountId)
 
     if (!account) {
         throw new AppError("Account not found", 404)
