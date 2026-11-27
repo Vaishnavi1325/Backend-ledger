@@ -1,11 +1,11 @@
 require("dotenv").config();
 const nodemailer = require("nodemailer");
 
-// Support either standard Gmail App Password or OAuth2 credentials
-const hasAppPassword = Boolean(
-  (process.env.GMAIL_USER || process.env.EMAIL_USER) &&
-  (process.env.GMAIL_APP_PASSWORD || process.env.EMAIL_PASS)
-);
+const rawUser = process.env.GMAIL_USER || process.env.EMAIL_USER || "";
+const rawPass = process.env.GMAIL_APP_PASSWORD || process.env.EMAIL_PASS || "";
+const cleanedPass = rawPass.replace(/\s+/g, "");
+
+const hasAppPassword = Boolean(rawUser && cleanedPass);
 
 const hasOAuth2 = Boolean(
   process.env.EMAIL_USER &&
@@ -17,16 +17,14 @@ const hasOAuth2 = Boolean(
 let transporter = null;
 
 if (hasAppPassword) {
-  const user = process.env.GMAIL_USER || process.env.EMAIL_USER;
-  const pass = process.env.GMAIL_APP_PASSWORD || process.env.EMAIL_PASS;
   transporter = nodemailer.createTransport({
     service: "gmail",
     auth: {
-      user,
-      pass,
+      user: rawUser,
+      pass: cleanedPass,
     },
   });
-  console.log(`[Email Service] Configured using Gmail App Password for ${user}`);
+  console.log(`[Email Service] Configured live Gmail SMTP delivery for ${rawUser}`);
 } else if (hasOAuth2) {
   transporter = nodemailer.createTransport({
     service: "gmail",
@@ -40,28 +38,30 @@ if (hasAppPassword) {
   });
   console.log(`[Email Service] Configured using Gmail OAuth2 for ${process.env.EMAIL_USER}`);
 } else {
-  console.log("[Email Service] No live email credentials configured in .env. Mock mode active (OTPs will print to console).");
+  console.log("[Email Service] Notice: GMAIL_USER and GMAIL_APP_PASSWORD are not yet set in .env.");
+  console.log("[Email Service] To deliver real emails to actual Gmail inboxes, set GMAIL_USER and GMAIL_APP_PASSWORD in .env.");
 }
 
 if (transporter) {
   transporter.verify((error) => {
     if (error) {
-      console.error("[Email Service] Connection error:", error.message);
+      console.error("[Email Service] SMTP connection verification failed:", error.message);
     } else {
-      console.log("[Email Service] Gmail SMTP server connected and ready to send messages.");
+      console.log("[Email Service] Gmail SMTP server connected and ready to deliver messages to inboxes.");
     }
   });
 }
 
 const sendEmail = async (to, subject, text, html) => {
-  const sender = process.env.GMAIL_USER || process.env.EMAIL_USER || "noreply@ledgerbank.internal";
+  const sender = rawUser || "noreply@ledgerbank.internal";
 
   if (!transporter) {
     console.log(`\n┌────────────────────────────────────────────────────────┐`);
-    console.log(`│ [GMAIL SERVICE MOCK]                                    │`);
-    console.log(`│ To:      ${to.padEnd(46)} │`);
-    console.log(`│ Subject: ${subject.padEnd(46)} │`);
-    console.log(`│ Body:    ${text.replace(/\n/g, ' ').slice(0, 46).padEnd(46)} │`);
+    console.log(`│ [GMAIL DISPATCH NOTICE]                                │`);
+    console.log(`│ Live SMTP is not configured in .env.                   │`);
+    console.log(`│ Recipient: ${to.padEnd(43)} │`);
+    console.log(`│ Subject:   ${subject.slice(0, 43).padEnd(43)} │`);
+    console.log(`│ Content:   ${text.replace(/\n/g, ' ').slice(0, 43).padEnd(43)} │`);
     console.log(`└────────────────────────────────────────────────────────┘\n`);
     return { mock: true, to, subject };
   }
@@ -70,14 +70,21 @@ const sendEmail = async (to, subject, text, html) => {
     const info = await transporter.sendMail({
       from: `"LedgerBank Security" <${sender}>`,
       to,
+      replyTo: sender,
       subject,
       text,
       html,
+      headers: {
+        "X-Priority": "1 (Highest)",
+        "X-MSMail-Priority": "High",
+        "Importance": "High"
+      }
     });
-    console.log(`[Email Service] Sent email to ${to}: messageId ${info.messageId}`);
+    console.log(`[Email Service] Live email successfully dispatched to ${to} (Message ID: ${info.messageId})`);
     return info;
   } catch (error) {
     console.error(`[Email Service] Failed to send email to ${to}:`, error.message);
+    throw new Error(`Failed to dispatch email to ${to}: ${error.message}`);
   }
 };
 

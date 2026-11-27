@@ -25,7 +25,6 @@ export function ForgotPasswordModal({ open, onOpenChange, initialEmail = "" }) {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
-  const [devOtpPreview, setDevOtpPreview] = useState("");
 
   const toast = useToast();
 
@@ -38,7 +37,6 @@ export function ForgotPasswordModal({ open, onOpenChange, initialEmail = "" }) {
       setOtp("");
       setNewPassword("");
       setConfirmPassword("");
-      setDevOtpPreview("");
     }
     onOpenChange(val);
   }
@@ -59,10 +57,7 @@ export function ForgotPasswordModal({ open, onOpenChange, initialEmail = "" }) {
     try {
       const res = await forgotPassword(trimmedEmail);
       setIsLoading(false);
-      setSuccessMsg(res.message || `A 6-digit verification code was sent to ${trimmedEmail}`);
-      if (res.devOtp) {
-        setDevOtpPreview(res.devOtp);
-      }
+      setSuccessMsg(res?.message || `A 6-digit verification code was sent to ${trimmedEmail}. Please check your Gmail/email inbox.`);
       toast.success("Verification code sent to your email.", "Email Sent");
       setStep(2);
     } catch (err) {
@@ -166,14 +161,6 @@ export function ForgotPasswordModal({ open, onOpenChange, initialEmail = "" }) {
           </div>
         )}
 
-        {devOtpPreview && (
-          <div className="rounded-md bg-blue-500/10 border border-blue-500/30 p-2.5 text-xs text-blue-900 dark:text-blue-200">
-            <span className="font-semibold">Dev/Console OTP Preview:</span>{" "}
-            <code className="bg-background px-1.5 py-0.5 rounded font-mono font-bold text-sm tracking-widest text-primary">
-              {devOtpPreview}
-            </code>
-          </div>
-        )}
 
         {step === 1 ? (
           /* STEP 1: Enter Email */

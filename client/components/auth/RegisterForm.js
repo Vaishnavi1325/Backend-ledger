@@ -20,7 +20,6 @@ export function RegisterForm() {
   const [step, setStep] = useState(1); // 1 = Details, 2 = Verify Email OTP
   const [serverError, setServerError] = useState("");
   const [otpCode, setOtpCode] = useState("");
-  const [devOtpHint, setDevOtpHint] = useState("");
   const [isSendingOtp, setIsSendingOtp] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
 
@@ -57,13 +56,10 @@ export function RegisterForm() {
 
     setIsSendingOtp(true);
     try {
-      const res = await sendOtp(email.trim().toLowerCase(), "REGISTRATION");
+      await sendOtp(email.trim().toLowerCase(), "REGISTRATION");
       setIsSendingOtp(false);
-      if (res?.data?.devOtp) {
-        setDevOtpHint(res.data.devOtp);
-      }
       setStep(2);
-      toast.info(`Verification code sent to ${email}`, "Check Your Inbox");
+      toast.info(`Verification code sent to ${email}. Please check your inbox.`, "Check Your Inbox");
     } catch (err) {
       setIsSendingOtp(false);
       setServerError(err.message || "Could not send verification code.");
@@ -139,14 +135,6 @@ export function RegisterForm() {
         </div>
       )}
 
-      {devOtpHint && (
-        <div className="mx-6 mb-2 rounded-md bg-blue-500/10 border border-blue-500/30 p-2 text-xs text-blue-900 dark:text-blue-200">
-          <span className="font-semibold">Dev OTP Preview:</span>{" "}
-          <code className="bg-background px-1.5 py-0.5 rounded font-mono font-bold text-sm tracking-widest text-primary">
-            {devOtpHint}
-          </code>
-        </div>
-      )}
 
       {step === 1 ? (
         /* STEP 1: Registration Form Details */

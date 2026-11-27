@@ -212,8 +212,7 @@ async function sendOtpController(req, res) {
         success: true,
         data: {
             message: `Verification code sent successfully to ${email}.`,
-            purpose,
-            ...(process.env.NODE_ENV !== "production" ? { devOtp: otp } : {})
+            purpose
         },
         error: null
     });
@@ -351,8 +350,7 @@ async function forgotPasswordController(req, res) {
     res.status(200).json({
         success: true,
         data: {
-            message: `Password reset verification code sent to ${email}.`,
-            ...(process.env.NODE_ENV !== "production" ? { devOtp: otp } : {})
+            message: `Password reset verification code sent to ${email}.`
         },
         error: null
     });

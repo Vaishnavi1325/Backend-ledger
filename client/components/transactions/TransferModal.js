@@ -262,22 +262,20 @@ export function TransferModal({
             <DialogTitle>Transfer Funds</DialogTitle>
             <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
               <span
-                className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${
-                  step === 1
+                className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${step === 1
                     ? "bg-primary text-primary-foreground font-bold"
                     : "bg-muted text-muted-foreground"
-                }`}
+                  }`}
               >
                 1
               </span>
               <span>Details</span>
               <span className="opacity-40">→</span>
               <span
-                className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${
-                  step === 2
+                className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${step === 2
                     ? "bg-primary text-primary-foreground font-bold"
                     : "bg-muted text-muted-foreground"
-                }`}
+                  }`}
               >
                 2
               </span>
@@ -402,11 +400,10 @@ export function TransferModal({
               {/* Lookup Feedback UI */}
               {recipientData && (
                 <div
-                  className={`p-3 rounded-lg border text-xs space-y-1.5 mt-1.5 transition-all ${
-                    recipientData.canReceiveTransfers
+                  className={`p-3 rounded-lg border text-xs space-y-1.5 mt-1.5 transition-all ${recipientData.canReceiveTransfers
                       ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-950 dark:text-emerald-100"
                       : "bg-destructive/10 border-destructive/30 text-destructive"
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5 font-medium">
@@ -416,11 +413,10 @@ export function TransferModal({
                       </span>
                     </div>
                     <span
-                      className={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase ${
-                        recipientData.status === "ACTIVE"
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase ${recipientData.status === "ACTIVE"
                           ? "bg-emerald-200/60 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200"
                           : "bg-destructive/20 text-destructive"
-                      }`}
+                        }`}
                     >
                       {recipientData.status}
                     </span>

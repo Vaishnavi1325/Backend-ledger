@@ -102,8 +102,7 @@ export function LoginForm() {
       setIsOtpLoading(false);
       setOtpStep(2);
       setCooldown(60);
-      const devHint = res?.data?.devOtp ? ` (Dev OTP: ${res.data.devOtp})` : "";
-      setServerSuccess(`Verification code dispatched to ${trimmed}!${devHint}`);
+      setServerSuccess(`Verification code dispatched to ${trimmed}! Please check your email inbox.`);
     } catch (err) {
       setIsOtpLoading(false);
       setServerError(err.message || "Failed to send verification code.");
